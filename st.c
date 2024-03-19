@@ -19,6 +19,7 @@
 
 #include "st.h"
 #include "win.h"
+#include "kitty_kbd.h"
 
 #if   defined(__linux)
  #include <pty.h>
@@ -42,6 +43,12 @@
 #define ISCONTROLC1(c)		(BETWEEN(c, 0x80, 0x9f))
 #define ISCONTROL(c)		(ISCONTROLC0(c) || ISCONTROLC1(c))
 #define ISDELIM(u)		(u && wcschr(worddelimiters, u))
+// csiparse() null terminates csiescseq so this is ok
+#define kitty_pop_arg0(default_) ({                    \
+    char * end = NULL;                                 \
+    long int a0 = strtol(csiescseq.buf + 1, &end, 10); \
+    (end == csiescseq.buf+1) ? default_ : a0;          \
+})
 
 enum term_mode {
 	MODE_WRAP        = 1 << 0,
@@ -155,7 +162,7 @@ typedef struct {
 static void execsh(char *, char **);
 static void stty(char **);
 static void sigchld(int);
-static void ttywriteraw(const char *, size_t);
+static void ttywriteraw(const char *, ssize_t);
 
 static void csidump(void);
 static void csihandle(void);
@@ -841,7 +848,7 @@ ttyread(void)
 }
 
 void
-ttywrite(const char *s, size_t n, int may_echo)
+ttywrite(const char *s, ssize_t n, int may_echo)
 {
 	const char *next;
 
@@ -869,7 +876,7 @@ ttywrite(const char *s, size_t n, int may_echo)
 }
 
 void
-ttywriteraw(const char *s, size_t n)
+ttywriteraw(const char *s, ssize_t n)
 {
 	fd_set wfd, rfd;
 	ssize_t r;
@@ -1797,8 +1804,21 @@ csihandle(void)
 	case 's': /* DECSC -- Save cursor position (ANSI.SYS) */
 		tcursor(CURSOR_SAVE);
 		break;
-	case 'u': /* DECRC -- Restore cursor position (ANSI.SYS) */
-		tcursor(CURSOR_LOAD);
+	case 'u':
+		if (csiescseq.priv) { /* kitty -- query flags */
+			len = snprintf(buf, sizeof(buf), "\x1B[?%uu",
+				stack[stack_i]);
+			ttywrite(buf, len, 0);
+		} else { /* DECRC -- Restore cursor position (ANSI.SYS) */
+			tcursor(CURSOR_LOAD);
+		}
+		break;
+	case '>': /* kitty -- push onto stack */
+		/* TODO : csiparse() exits early and leaves us to do more parsing.. */
+		stack_push(kitty_pop_arg0(0));
+		break;
+	case '<': /* kitty -- pop off the stack */
+		stack_pop(kitty_pop_arg0(1));
 		break;
 	case ' ':
 		switch (csiescseq.mode[1]) {

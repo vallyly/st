@@ -8,6 +8,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <alloca.h>
+#include <ctype.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/cursorfont.h>
@@ -19,6 +21,7 @@ char *argv0;
 #include "arg.h"
 #include "st.h"
 #include "win.h"
+#include "kitty_kbd.h"
 
 /* types used in config.h */
 typedef struct {
@@ -167,7 +170,6 @@ static int evrow(XEvent *);
 static void expose(XEvent *);
 static void visibility(XEvent *);
 static void unmap(XEvent *);
-static void kpress(XEvent *);
 static void cmessage(XEvent *);
 static void resize(XEvent *);
 static void focus(XEvent *);
@@ -189,7 +191,7 @@ static int match(uint, uint);
 static void run(void);
 static void usage(void);
 
-static void (*handler[LASTEvent])(XEvent *) = {
+void (*handler[LASTEvent])(XEvent *) = {
 	[KeyPress] = kpress,
 	[ClientMessage] = cmessage,
 	[ConfigureNotify] = resize,
@@ -1880,6 +1882,51 @@ kpress(XEvent *ev)
 		}
 	}
 	ttywrite(buf, len, 1);
+}
+
+void kpress1(XEvent * ev) {
+    #define BUF_SIZEOF 64
+    XKeyEvent * e = &ev->xkey;
+    int len;
+    char * buf = alloca(BUF_SIZEOF);
+    KeySym ksym = NoSymbol;
+    Status status;
+    Shortcut * bp;
+
+    if (IS_SET(MODE_KBDLOCK) || !xw.ime.xic)
+        return;                 // tmp ?
+
+    len = XmbLookupString(xw.ime.xic, e, buf, BUF_SIZEOF, &ksym, &status);
+    if (status == XBufferOverflow)
+        return;
+
+    kitty_kbd_mod_t mods = x_to_kitty(e->state);
+
+    if (mods) {
+        for (int i = 0; i < LEN(lvl1_mod); i++) {
+            if (lvl1_mod[i].k == ksym) {
+                len = snprintf(buf, BUF_SIZEOF, lvl1_mod[i].s, mods+1);
+                goto ready;
+            }
+        }
+        if (!(mods & (kitty_shift|kitty_caps_lock))) {
+            if (!isascii(ksym))
+                return;
+            len = snprintf(buf, BUF_SIZEOF, "\e[%u;%uu", ksym, mods+1);
+        }
+    } else {
+        for (int i = 0; i < LEN(lvl1_no_mod); i++) {
+            if (lvl1_no_mod[i].k == ksym) {
+                buf = lvl1_no_mod[i].s;
+                len = strlen(lvl1_no_mod[i].s);
+                break;
+            }
+        }
+    }
+    ready:
+    if (len <= 0) return;
+    ttywrite(buf, len, 1);
+    #undef BUF_SIZEOF
 }
 
 void
