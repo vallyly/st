@@ -1,7 +1,18 @@
 st - simple terminal
 --------------------
-st is a simple terminal emulator for X which sucks less.
+[st is a simple terminal emulator for X which sucks less.](https://st.suckless.org/)
 
+This (WIP) patch implements kitty's keyboard protocol for st. It solves numerous problems with console application development. Read more here:
+https://sw.kovidgoyal.net/kitty/keyboard-protocol
+
+Patching
+--------
+
+    git clone https://github.com/vallyly/st.git
+    cd st
+    git diff 35030fc HEAD -- ":(exclude)README*" > st-kbd.diff
+
+Now apply st-kbd.diff to your own source tree.
 
 Requirements
 ------------
