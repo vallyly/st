@@ -1820,6 +1820,21 @@ csihandle(void)
 	case '<': /* kitty -- pop off the stack */
 		stack_pop(kitty_pop_arg0(1));
 		break;
+    case '=': /* kitty -- set the stack */
+        // TODO this and the previous 2 cases are kind of ugly, but they'll
+        // never be a "hot path"; they'll be called a few times at the start
+        // and end of an application. So I don't feel good about doing some check
+        // inside say tputc (just before csiparse()) either.
+        if (csiescseq.len <= 1) break;
+        memmove(csiescseq.buf, csiescseq.buf + 1, csiescseq.len);
+        csiescseq.len--;
+        csiescseq.narg = 0;
+        csiparse();
+        if (csiescseq.narg == 0 || csiescseq.narg > 2)
+            break;
+        DEFAULT(csiescseq.arg[1], 1);
+        stack_set(csiescseq.arg[0], csiescseq.arg[1]);
+        break;
 	case ' ':
 		switch (csiescseq.mode[1]) {
 		case 'q': /* DECSCUSR -- Set Cursor Style */

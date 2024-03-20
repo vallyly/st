@@ -27,10 +27,9 @@ typedef enum {
 } kitty_kbd_mod_t;
 
 
+// kitty_kbd.c
 extern int stack[];
 extern int stack_i;
-
-// kitty_kbd.c
 void stack_set(kitty_kbd_t, int);
 void stack_push(kitty_kbd_t);
 void stack_pop(int);
