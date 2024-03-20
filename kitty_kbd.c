@@ -3,6 +3,15 @@
 #include <X11/Xlib.h>
 #include <string.h>
 
+
+/* TODO :
+ * Terminals must maintain separate stacks
+ * for the main and alternate screens.
+ */
+#define STACK_N 2
+int stack[STACK_N] = {0};
+int stack_i = 0;
+
 void stack_dirty(void);
 extern void die(const char *, ...);
 

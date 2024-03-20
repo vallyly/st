@@ -27,13 +27,8 @@ typedef enum {
 } kitty_kbd_mod_t;
 
 
-/* TODO :
- * Terminals must maintain separate stacks
- * for the main and alternate screens.
- */
-#define STACK_N 2
-static int stack[STACK_N] = {0};
-static int stack_i = 0;
+extern int stack[];
+extern int stack_i;
 
 // kitty_kbd.c
 void stack_set(kitty_kbd_t, int);
