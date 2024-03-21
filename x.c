@@ -1915,6 +1915,7 @@ void kpress_kitty(XEvent * ev) {
 
     XKeyEvent * e = &ev->xkey;
     KeySym ksym = NoSymbol;
+    KeySym ksym_unshifted;
 
     if (IS_SET(MODE_KBDLOCK) || !xw.ime.xic) return;
 
@@ -1931,14 +1932,10 @@ void kpress_kitty(XEvent * ev) {
 
     if (status == XBufferOverflow) return;
 
+    ksym_unshifted = ksym;
+
     for (int i = 0; i < LEN(ntkeys); i++) {
         if (ntkeys[i].k == ksym) {
-            if (XK_Escape && !(stack[stack_i] & kitty_lvl1)) {
-                buf[0] = '\e';
-                len = 1;
-                goto ready;
-            }
-
             buf_puts("\e[", 2);
             if (start_non_negotiable(ntkeys[i]) || mods || typ != press) {
                 buf_puts(ntkeys[i].s, abs(ntkeys[i].start_n));
@@ -1973,31 +1970,39 @@ void kpress_kitty(XEvent * ev) {
             goto ready;
         }
     } else if (ksym == XK_space) {
-        switch (typ) {
-            case press:
-                if (mods <= (kitty_ctrl|kitty_alt|kitty_shift)) {
-                    goto ready;
-                }
-            case release:
-                i = 13;
-                break;
-            case repeat:
-                if (mods <= kitty_shift) {
-                    goto ready;
-                } else {
-                    i = 13;
-                    break;
-                }
+        if (mods > kitty_shift || typ == release) {
+            i = 32;
+        } else {
+            goto ready;
         }
     } else {
         if (typ != release)
             goto ready;
         if (!len)
             return;
-        i = ksym;
+        e->state &= ~(ShiftMask|LockMask);
+        ({
+            int __typ = e->type;
+            e->type = KeyPress;
+            len = XmbLookupString(xw.ime.xic, e, buf, BUF_SIZEOF, &ksym_unshifted, &status);
+            e->type = __typ;
+        });
+        buf_puts("\e[", 2);
+        // there is a bug in alacritty's implementation
+        // where they wont unshift this first field
+        // unless "Report alternate keys" flag is set :)
+        // this effects level 0b10 and 0b11 and probably more.
+        // kitty always unshifts so do that.
+        buf_puti(ksym_unshifted);
+        if (stack[stack_i] & kitty_lvl3 && ksym != ksym_unshifted) {
+            buf_putc(':'); buf_puti(ksym);
+        }
+        goto csi_fini;
     }
 
-    buf_puts("\e[", 2); buf_puti(i); buf_putc(';'); buf_puti(mods+1);
+    buf_puts("\e[", 2); buf_puti(i);
+    csi_fini:
+    buf_putc(';'); buf_puti(mods+1);
     if (typ != press) {
         buf_putc(':'); buf_puti(typ);
     }

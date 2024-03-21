@@ -69,16 +69,16 @@ void stack_dirty(void) {
     // redundant
     if (!valid_kbd_t(stack[stack_i])) die("bad stack.\n");
 
-    if (stack[stack_i] == kitty_lvl0) {
-        handler[KeyPress] = kpress;
-        handler[KeyRelease] = 0;
-    } else {
+    if (stack[stack_i] & kitty_lvl1)
         handler[KeyPress] = kpress_kitty;
-        if (stack[stack_i] & kitty_lvl2)
-            handler[KeyRelease] = krelease_kitty;
-        else
-            handler[KeyRelease] = 0;
-    }
+    else
+        handler[KeyPress] = kpress;
+
+
+    if (stack[stack_i] & kitty_lvl2)
+        handler[KeyRelease] = krelease_kitty;
+    else
+        handler[KeyRelease] = 0;
 }
 
 kitty_kbd_mod_t mod_x_to_kitty(int state) {

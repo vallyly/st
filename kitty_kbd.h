@@ -8,15 +8,15 @@ typedef enum {
     kitty_lvl0 =  0b00000000,  // Default behavior
     kitty_lvl1 =  0b00000001,  // Disambiguate escape codes
     kitty_lvl2 =  0b00000010,  // Report event types
-    // ktty_lvl3=0b00000100,   // Report alternate keys
-    // ktty_lvl4=0b00001000,   // Report all keys as escape codes
-    // ktty_lvl5=0b00010000,   // Report associated text
-    kitty_max = (kitty_lvl2|kitty_lvl1)
+    kitty_lvl3 =  0b00000100,  // Report alternate keys
+    // kitty_lvl4=0b00001000,   // Report all keys as escape codes
+    // kitty_lvl5=0b00010000,   // Report associated text
+    kitty_max = (kitty_lvl3|kitty_lvl2|kitty_lvl1)
 } kitty_kbd_t;
 
 
 typedef enum {
-    kitty_none = 0,
+    kitty_none =               0,
     kitty_shift     = 0b00000001,
     kitty_alt       = 0b00000010,
     kitty_ctrl      = 0b00000100,
