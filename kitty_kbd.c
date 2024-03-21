@@ -8,8 +8,8 @@
  * for the main and alternate screens.
  */
 #define STACK_N 2
-int stack[STACK_N] = {0};
-int stack_i = 0;
+kitty_kbd_t stack[STACK_N] = {0};
+unsigned int stack_i = 0;
 
 void stack_dirty(void);
 extern void die(const char *, ...);
@@ -52,10 +52,10 @@ void stack_push(kitty_kbd_t flags) {
 }
 
 
-void stack_pop(int n) {
+void stack_pop(unsigned int n) {
     /* If a pop request is received that empties the stack,
      * all flags are reset */
-    if (stack_i - n < 0) {
+    if (n > stack_i) {
         stack[0] = 0;
         stack_i = 0;
     } else {

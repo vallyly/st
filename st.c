@@ -46,7 +46,7 @@
 // csiparse() null terminates csiescseq so this is ok
 #define kitty_pop_arg0(default_) ({                    \
     char * end = NULL;                                 \
-    long int a0 = strtol(csiescseq.buf + 1, &end, 10); \
+    unsigned long int a0 = strtoul(csiescseq.buf + 1, &end, 10); \
     (end == csiescseq.buf+1) ? default_ : a0;          \
 })
 

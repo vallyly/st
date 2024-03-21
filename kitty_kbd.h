@@ -38,11 +38,11 @@ typedef enum {
 #define KeyRepeat 1
 
 // kitty_kbd.c
-extern int stack[];
-extern int stack_i;
+extern kitty_kbd_t stack[];
+extern unsigned int stack_i;
 void stack_set(kitty_kbd_t, int);
 void stack_push(kitty_kbd_t);
-void stack_pop(int);
+void stack_pop(unsigned int);
 kitty_kbd_mod_t   mod_x_to_kitty(int);
 kitty_kbd_event_t keyev_x_to_kitty(int);
 #define keyev_x_to_kitty(i) ((kitty_kbd_event_t[LASTEvent])         \
