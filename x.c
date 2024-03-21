@@ -1884,50 +1884,154 @@ kpress(XEvent *ev)
 	ttywrite(buf, len, 1);
 }
 
-void kpress1(XEvent * ev) {
-    #define BUF_SIZEOF 64
-    XKeyEvent * e = &ev->xkey;
+
+void kpress_kitty(XEvent * ev) {
+    #define BUF_SIZEOF ((int)64)
+
+    char buf[BUF_SIZEOF];
     int len;
-    char * buf = alloca(BUF_SIZEOF);
-    KeySym ksym = NoSymbol;
+    int wc = 0;
     Status status;
-    Shortcut * bp;
 
-    if (IS_SET(MODE_KBDLOCK) || !xw.ime.xic)
-        return;                 // tmp ?
+    #define buf_puti(i) ({                                      \
+        if (wc >= BUF_SIZEOF) return;                           \
+        int ret = snprintf(buf + wc, BUF_SIZEOF - wc, "%u", i); \
+        if (ret <= 0) return;                                   \
+        wc += ret;                                              \
+    })
+    #define buf_puts(s, n) ({             \
+        if (wc + n >= BUF_SIZEOF) return; \
+        memcpy(buf + wc, s, n);           \
+        wc += n;                          \
+    })
+    #define buf_putsn(s) ({ \
+        int sl = strlen(s); \
+        buf_puts(s, sl);    \
+    })
+    #define buf_putc(c) ({            \
+        if (wc >= BUF_SIZEOF) return; \
+        buf[wc++] = c;                \
+    })
 
-    len = XmbLookupString(xw.ime.xic, e, buf, BUF_SIZEOF, &ksym, &status);
-    if (status == XBufferOverflow)
-        return;
+    XKeyEvent * e = &ev->xkey;
+    KeySym ksym = NoSymbol;
 
-    kitty_kbd_mod_t mods = x_to_kitty(e->state);
+    if (IS_SET(MODE_KBDLOCK) || !xw.ime.xic) return;
 
-    if (mods) {
-        for (int i = 0; i < LEN(lvl1_mod); i++) {
-            if (lvl1_mod[i].k == ksym) {
-                len = snprintf(buf, BUF_SIZEOF, lvl1_mod[i].s, mods+1);
+    kitty_kbd_mod_t mods = mod_x_to_kitty(e->state);
+    kitty_kbd_event_t typ = keyev_x_to_kitty(e->type);
+
+    ({
+        // X rejects the event if the type is not KeyPress. that's dumb though.
+        int __typ = e->type;
+        e->type = KeyPress;
+        len = XmbLookupString(xw.ime.xic, e, buf, BUF_SIZEOF, &ksym, &status);
+        e->type = __typ;
+    });
+
+    if (status == XBufferOverflow) return;
+
+    for (int i = 0; i < LEN(ntkeys); i++) {
+        if (ntkeys[i].k == ksym) {
+            if (XK_Escape && !(stack[stack_i] & kitty_lvl1)) {
+                buf[0] = '\e';
+                len = 1;
                 goto ready;
             }
-        }
-        if (!(mods & (kitty_shift|kitty_caps_lock))) {
-            if (!isascii(ksym))
-                return;
-            len = snprintf(buf, BUF_SIZEOF, "\e[%u;%uu", ksym, mods+1);
-        }
-    } else {
-        for (int i = 0; i < LEN(lvl1_no_mod); i++) {
-            if (lvl1_no_mod[i].k == ksym) {
-                buf = lvl1_no_mod[i].s;
-                len = strlen(lvl1_no_mod[i].s);
-                break;
+
+            buf_puts("\e[", 2);
+            if (start_non_negotiable(ntkeys[i]) || mods || typ != press) {
+                buf_puts(ntkeys[i].s, abs(ntkeys[i].start_n));
+                if (mods || typ != press) {
+                    buf_putc(';');
+                    buf_puti(mods+1);
+                    if (typ != press) {
+                        buf_putc(':'); buf_puti(typ);
+                    }
+                }
             }
+            buf_putsn(ntkeys[i].s + abs(ntkeys[i].start_n));
+            len = wc;
+            goto ready;
         }
     }
+    int i;
+    if (ksym == XK_Return) {
+        if (typ == release && !mods)
+            return;
+        if (mods)
+            i = 13;
+        else
+            goto ready;
+    } else if (ksym == XK_BackSpace) {
+        if (typ == release && !mods)
+            return;
+        if (mods) {
+            i = 127;
+        } else {
+            buf[0] = 0x7f;
+            goto ready;
+        }
+    } else if (ksym == XK_space) {
+        switch (typ) {
+            case press:
+                if (mods <= (kitty_ctrl|kitty_alt|kitty_shift)) {
+                    goto ready;
+                }
+            case release:
+                i = 13;
+                break;
+            case repeat:
+                if (mods <= kitty_shift) {
+                    goto ready;
+                } else {
+                    i = 13;
+                    break;
+                }
+        }
+    } else {
+        if (typ != release)
+            goto ready;
+        if (!len)
+            return;
+        i = ksym;
+    }
+
+    buf_puts("\e[", 2); buf_puti(i); buf_putc(';'); buf_puti(mods+1);
+    if (typ != press) {
+        buf_putc(':'); buf_puti(typ);
+    }
+    buf_putc('u');
+    len = wc;
+
     ready:
     if (len <= 0) return;
     ttywrite(buf, len, 1);
+
+    #undef buf_putc
+    #undef buf_putsn
+    #undef buf_puts
+    #undef buf_puti
     #undef BUF_SIZEOF
 }
+
+
+void krelease_kitty(XEvent * ev) {
+    // ripped from glfw :)
+    if (XEventsQueued(xw.dpy, QueuedAfterReading)) {
+        XEvent next;
+        XNextEvent(xw.dpy, &next);
+        if (next.type == KeyPress &&
+            next.xkey.keycode == ev->xkey.keycode &&
+            (next.xkey.time - ev->xkey.time) < 20) {
+                ev->type = KeyRepeat;
+            } else {
+                XPutBackEvent(xw.dpy, &next);
+            }
+    }
+    kpress_kitty(ev);
+}
+
 
 void
 cmessage(XEvent *e)

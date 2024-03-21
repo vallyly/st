@@ -3,7 +3,6 @@
 #include <X11/Xlib.h>
 #include <string.h>
 
-
 /* TODO :
  * Terminals must maintain separate stacks
  * for the main and alternate screens.
@@ -15,10 +14,7 @@ int stack_i = 0;
 void stack_dirty(void);
 extern void die(const char *, ...);
 
-#define valid_kbd_t(i) (i == 0 ||  \
-    (((unsigned)i) <= ktty_last && \
-    (sizeof(i) << 3) - __builtin_clz(i) - __builtin_ctz(i) == 1))
-
+#define valid_kbd_t(i) (i >= kitty_lvl0 && i <= kitty_max)
 
 #define stack_popfront() \
     memmove(stack, stack + 1, sizeof(stack) - sizeof(*stack))
@@ -70,20 +66,22 @@ void stack_pop(int n) {
 
 
 void stack_dirty(void) {
-    switch (stack[stack_i]) {
-        case 0:
-            handler[KeyPress] = kpress;
-            break;
-        case 1:
-            handler[KeyPress] = kpress1;
-            break;
-        default:
-            die("bad stack.\n");
+    // redundant
+    if (!valid_kbd_t(stack[stack_i])) die("bad stack.\n");
 
+    if (stack[stack_i] == kitty_lvl0) {
+        handler[KeyPress] = kpress;
+        handler[KeyRelease] = 0;
+    } else {
+        handler[KeyPress] = kpress_kitty;
+        if (stack[stack_i] & kitty_lvl2)
+            handler[KeyRelease] = krelease_kitty;
+        else
+            handler[KeyRelease] = 0;
     }
 }
 
-kitty_kbd_mod_t x_to_kitty(int state) {
+kitty_kbd_mod_t mod_x_to_kitty(int state) {
     // NOTE : add 1 to ret before writing it to the tty. (???)
     // xmodmap -pm
 
